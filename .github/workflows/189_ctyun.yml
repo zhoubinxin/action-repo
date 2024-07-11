@@ -1,0 +1,26 @@
+name: 天翼云电脑保活
+
+on:
+  schedule:
+    - cron: '*/20 0-16 * * *'
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v3
+      - name: 'Set up Python'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: 'Install dependencies'
+        run: pip install -r 189/requirements.txt
+
+      - name: 'Run script'
+        env:
+          CTYUN: ${{secrets.CTYUN}}
+        run: python 189/ctyun.py

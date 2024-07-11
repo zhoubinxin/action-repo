@@ -1,0 +1,25 @@
+name: 天翼云盘签到
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v3
+      - name: 'Set up Python'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: 'Install dependencies'
+        run: pip install -r 189/requirements.txt
+
+      - name: 'Run script'
+        env:
+          TY_CLOUD: ${{ secrets.TY_CLOUD }}
+        run: python 189/cloud_check_in.py

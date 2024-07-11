@@ -1,0 +1,48 @@
+name: 站点保活
+
+on:
+  schedule:
+    - cron: '0 */12 * * *'  # 每12小时执行一次
+  workflow_dispatch:
+
+jobs:
+  auto-visit-websites:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.x
+
+    - name: Install requests library
+      run: pip install requests
+
+    - name: Auto Visit Websites
+      run: |
+        echo "
+        import requests
+
+        websites = [
+            'https://blog.xbxin.com',
+            'https://alist.xbxin.com',
+            # 添加更多网站
+        ]
+
+        def check_website(url):
+            try:
+                response = requests.get(url)
+                if response.status_code == 200:
+                    print(f'Website {url} is up.')
+                else:
+                    print(f'Website {url} returned status code {response.status_code}.')
+            except requests.exceptions.RequestException as e:
+                print(f'An error occurred while checking {url}: {e}')
+
+        for website in websites:
+            check_website(website)
+        " > auto_visit_websites.py
+        python auto_visit_websites.py
