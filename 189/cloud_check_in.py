@@ -105,17 +105,25 @@ def login(username, password):
         if r.json()['result'] == 0:
             print(r.json()['msg'])
         else:
-            raise Exception(f"登录失败：{r.json()['msg']}")
+            raise Exception(f"天翼云盘：登录失败：{r.json()['msg']}")
         redirect_url = r.json()['toUrl']
         s.get(redirect_url)
         return s
     except Exception as e:
-        send_msg(f"天翼云签到登录失败{str(e)}")
+        send_msg(f"天翼云盘：登录失败{str(e)}")
         return None
 
 
 def check_in(username, password):
-    s = login(username, password)
+    # 多次尝试
+    retry = 3
+    while retry:
+        s = login(username, password)
+        if s:
+            break
+
+        retry -= 1
+
     if not s:
         print("登录失败")
         return
@@ -146,7 +154,7 @@ def check_in(username, password):
         time.sleep(5)
         response = s.get(url, headers=headers)
         if "errorCode" in response.text:
-            print(response.text)
+            send_msg(f"天翼云盘：{response.text}")
         else:
             description = response.json()['prizeName']
 
