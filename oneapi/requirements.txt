@@ -1,0 +1,2 @@
+environs==11.0.0
+Requests==2.32.3
