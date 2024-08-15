@@ -1,9 +1,10 @@
 name: News TG
 
-schedule:
-  - cron: '*/30 * * * *'
-watch:
-  types: started
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  watch:
+    types: started
 
 
 jobs:
