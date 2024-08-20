@@ -23,4 +23,5 @@ jobs:
       - name: 'Run script'
         env:
           CTYUN: ${{secrets.CTYUN}}
+          TOKEN: ${{secrets.TOKEN}}
         run: python 189/ctyun.py
