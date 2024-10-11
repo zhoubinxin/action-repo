@@ -1,4 +1,0 @@
-beautifulsoup4==4.12.3
-environs==11.0.0
-feedparser==6.0.11
-Requests==2.32.3

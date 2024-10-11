@@ -75,7 +75,8 @@ def keep_alive(ctyun, user_data, retries=3, delay=10):
                 raise "连接超时"
 
 
-def send_msg(message, action="qywx", webhook="H", msg_type="text", url="https://api.xbxin.com/msg"):
+def send_msg(content):
+    url = "https://api.xbxin.com/msg/admin/corp"
     env = Env()
     env.read_env()
     token = env.str("TOKEN")
@@ -85,10 +86,9 @@ def send_msg(message, action="qywx", webhook="H", msg_type="text", url="https://
     }
 
     data = {
-        "message": message,
-        "action": action,
-        "webhook": webhook,
-        "msg_type": msg_type,
+        "title": "天翼云电脑",
+        "desc": "保活",
+        "content": content
     }
 
     requests.post(url, json=data, headers=headers)
