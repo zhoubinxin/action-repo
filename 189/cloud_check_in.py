@@ -6,48 +6,49 @@ import rsa
 import requests
 from environs import Env
 
-s = requests.Session()
+env = Env()
+env.read_env()
 
 
-def int2char(a):
-    base36_chars = list("0123456789abcdefghijklmnopqrstuvwxyz")
-    return base36_chars[a]
+def int_to_base36_char(value):
+    base36_chars = "0123456789abcdefghijklmnopqrstuvwxyz"
+    return base36_chars[value]
 
 
-def b64tohex(a):
+def base64_to_hex(b64_string):
     B64MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-    d = ""
-    e = 0
-    c = 0
-    for i in range(len(a)):
-        if list(a)[i] != "=":
-            v = B64MAP.index(list(a)[i])
-            if e == 0:
-                e = 1
-                d += int2char(v >> 2)
-                c = 3 & v
-            elif e == 1:
-                e = 2
-                d += int2char(c << 2 | v >> 4)
-                c = 15 & v
-            elif e == 2:
-                e = 3
-                d += int2char(c)
-                d += int2char(v >> 2)
-                c = 3 & v
+    hex_string = ""
+    carry = 0
+    buffer = 0
+    for char in b64_string:
+        if char != "=":
+            value = B64MAP.index(char)
+            if carry == 0:
+                carry = 1
+                hex_string += int_to_base36_char(value >> 2)
+                buffer = 3 & value
+            elif carry == 1:
+                carry = 2
+                hex_string += int_to_base36_char(buffer << 2 | value >> 4)
+                buffer = 15 & value
+            elif carry == 2:
+                carry = 3
+                hex_string += int_to_base36_char(buffer)
+                hex_string += int_to_base36_char(value >> 2)
+                buffer = 3 & value
             else:
-                e = 0
-                d += int2char(c << 2 | v >> 4)
-                d += int2char(15 & v)
-    if e == 1:
-        d += int2char(c << 2)
-    return d
+                carry = 0
+                hex_string += int_to_base36_char(buffer << 2 | value >> 4)
+                hex_string += int_to_base36_char(15 & value)
+    if carry == 1:
+        hex_string += int_to_base36_char(buffer << 2)
+    return hex_string
 
 
-def rsa_encode(j_rsakey, string):
-    rsa_key = f"-----BEGIN PUBLIC KEY-----\n{j_rsakey}\n-----END PUBLIC KEY-----"
+def rsa_encrypt(public_key, message):
+    rsa_key = f"-----BEGIN PUBLIC KEY-----\n{public_key}\n-----END PUBLIC KEY-----"
     pubkey = rsa.PublicKey.load_pkcs1_openssl_pem(rsa_key.encode())
-    result = b64tohex((base64.b64encode(rsa.encrypt(f'{string}'.encode(), pubkey))).decode())
+    result = base64_to_hex((base64.b64encode(rsa.encrypt(f'{message}'.encode(), pubkey))).decode())
     return result
 
 
@@ -57,81 +58,80 @@ def calculate_md5_sign(params):
 
 def login(username, password):
     try:
+        session = requests.Session()
         urlToken = ("https://m.cloud.189.cn/udb/udb_login.jsp?pageId=1&pageKey=default&clientType=wap&redirectURL"
                     "=https://m.cloud.189.cn/zhuanti/2021/shakeLottery/index.html")
-        r = s.get(urlToken)
-        pattern = r"https?://[^\s'\"]+"  # 匹配以http或https开头的url
-        match = re.search(pattern, r.text)  # 在文本中搜索匹配
-        if match:  # 如果找到匹配
-            url = match.group()  # 获取匹配的字符串
-        else:  # 如果没有找到匹配
-            raise Exception("没有找到url")
+        response = session.get(urlToken)
 
-        r = s.get(url)
-        pattern = r"<a id=\"j-tab-login-link\"[^>]*href=\"([^\"]+)\""  # 匹配id为j-tab-login-link的a标签，并捕获href引号内的内容
-        match = re.search(pattern, r.text)  # 在文本中搜索匹配
-        if match:  # 如果找到匹配
-            href = match.group(1)  # 获取捕获的内容
-        else:  # 如果没有找到匹配
-            raise Exception("没有找到href链接")
+        url_match = re.search(r"https?://[^\s'\"]+", response.text)
+        if not url_match:
+            raise Exception("登录URL未找到")
+        redirect_url = url_match.group()
 
-        r = s.get(href)
-        captchaToken = re.findall(r"captchaToken' value='(.+?)'", r.text)[0]
-        lt = re.findall(r'lt = "(.+?)"', r.text)[0]
-        returnUrl = re.findall(r"returnUrl= '(.+?)'", r.text)[0]
-        paramId = re.findall(r'paramId = "(.+?)"', r.text)[0]
-        j_rsakey = re.findall(r'j_rsaKey" value="(\S+)"', r.text, re.M)[0]
-        s.headers.update({"lt": lt})
+        response = session.get(redirect_url)
+        href_match = re.search(r'<a id="j-tab-login-link"[^>]*href="([^\"]+)"', response.text)
+        if not href_match:
+            raise Exception("登录链接未找到")
+        login_href = href_match.group(1)
 
-        username = rsa_encode(j_rsakey, username)
-        password = rsa_encode(j_rsakey, password)
+        response = session.get(login_href)
+        captcha_token = re.findall(r"captchaToken' value='(.+?)'", response.text)[0]
+        lt = re.findall(r'lt = "(.+?)"', response.text)[0]
+        return_url = re.findall(r"returnUrl= '(.+?)'", response.text)[0]
+        param_id = re.findall(r'paramId = "(.+?)"', response.text)[0]
+        rsa_key = re.findall(r'j_rsaKey" value="(\S+)"', response.text, re.M)[0]
+        session.headers.update({"lt": lt})
+
+        encrypted_username = rsa_encrypt(rsa_key, username)
+        encrypted_password = rsa_encrypt(rsa_key, password)
         url = "https://open.e.189.cn/api/logbox/oauth2/loginSubmit.do"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:74.0) Gecko/20100101 Firefox/76.0',
             'Referer': 'https://open.e.189.cn/',
         }
-        data = {
+        login_payload = {
             "appKey": "cloud",
             "accountType": '01',
-            "userName": f"{{RSA}}{username}",
-            "password": f"{{RSA}}{password}",
+            "userName": f"{{RSA}}{encrypted_username}",
+            "password": f"{{RSA}}{encrypted_password}",
             "validateCode": "",
-            "captchaToken": captchaToken,
-            "returnUrl": returnUrl,
+            "captchaToken": captcha_token,
+            "returnUrl": return_url,
             "mailSuffix": "@189.cn",
-            "paramId": paramId
+            "paramId": param_id
         }
-        r = s.post(url, data=data, headers=headers, timeout=5)
-        if r.json()['result'] == 0:
-            print(r.json()['msg'])
+        login_response = session.post(url, data=login_payload, headers=headers, timeout=5)
+        login_info = login_response.json()
+        if login_info['result'] == 0:
+            print(login_info['msg'])
         else:
-            raise Exception(f"天翼云盘：登录失败：{r.json()['msg']}")
-        redirect_url = r.json()['toUrl']
-        s.get(redirect_url)
-        return s
+            raise Exception(f"{login_info['msg']}")
+        redirect_url = login_info['toUrl']
+        session.get(redirect_url)
+        return session
     except Exception as e:
-        send_msg(f"天翼云盘：登录失败{str(e)}")
+        send_msg(f"账号 {username}\n登录失败: {str(e)}")
         return None
 
 
 def check_in(username, password):
-    # 多次尝试
-    retry = 3
-    while retry:
-        s = login(username, password)
-        if s:
+    max_retries = 3
+    session = None
+    while max_retries:
+        session = login(username, password)
+        if session:
             break
+        max_retries -= 1
 
-        retry -= 1
-
-    if not s:
-        print("登录失败")
+    if not session:
+        print(f"账号 {username} 登录失败")
         return
 
-    rand = str(round(time.time() * 1000))
-    surl = (f'https://api.cloud.189.cn/mkt/userSign.action?rand={rand}&clientType=TELEANDROID&version=8.6.3&model=SM'
-            f'-G930K')
-    url_list = [
+    rand_timestamp = str(round(time.time() * 1000))
+    sign_in_url = (
+        f'https://api.cloud.189.cn/mkt/userSign.action?rand={rand_timestamp}&clientType=TELEANDROID&version=8.6.3'
+        f'&model=SM-G930K')
+    activity_urls = [
         'https://m.cloud.189.cn/v2/drawPrizeMarketDetails.action?taskId=TASK_SIGNIN&activityId=ACT_SIGNIN',
         'https://m.cloud.189.cn/v2/drawPrizeMarketDetails.action?taskId=TASK_SIGNIN_PHOTOS&activityId=ACT_SIGNIN',
         f'https://m.cloud.189.cn/v2/drawPrizeMarketDetails.action?taskId=TASK_2022_FLDFS_KJ&activityId=ACT_SIGNIN'
@@ -145,28 +145,25 @@ def check_in(username, password):
         "Host": "m.cloud.189.cn",
         "Accept-Encoding": "gzip, deflate",
     }
-    response = s.get(surl, headers=headers)
-    netdiskBonus = response.json()['netdiskBonus']
+    response = session.get(sign_in_url, headers=headers)
+    netdisk_bonus = response.json()['netdiskBonus']
 
-    content = f"签到获得{netdiskBonus}M空间"
+    content = f"账号 {username}\n签到获得 {netdisk_bonus}M 空间"
 
-    for url in url_list:
+    for activity_url in activity_urls:
         time.sleep(5)
-        response = s.get(url, headers=headers)
+        response = session.get(activity_url, headers=headers)
         if "errorCode" in response.text:
-            send_msg(f"天翼云盘：{response.text}")
+            content += f"\n{response.json()['errorCode']}"
         else:
-            description = response.json()['prizeName']
-
-            content += f"\n抽奖获得{description}"
+            description = response.json().get('prizeName', '未知奖励')
+            content += f"\n抽奖获得 {description}"
 
     send_msg(content)
 
 
 def send_msg(content):
     url = "https://api.xbxin.com/msg/admin/corp"
-    env = Env()
-    env.read_env()
     token = env.str("TOKEN")
 
     headers = {
@@ -183,10 +180,8 @@ def send_msg(content):
 
 
 def main():
-    env = Env()
-    env.read_env()
-    userList = env.json("TY_CLOUD")
-    for user in userList:
+    users = env.json("TY_CLOUD")
+    for user in users:
         username = user['username']
         password = user['password']
         check_in(username, password)
